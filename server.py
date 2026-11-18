@@ -43,7 +43,7 @@ NEW_LIMIT, NEW_WINDOW = 30, 600        # pastes per IP per 10 min
 INLINE_IMAGES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 CLI_UA = re.compile(r"^(curl|wget|httpie|python-requests|python-urllib|go-http|powershell|libwww|aria2|fetch)", re.I)
 
-PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://imgs.xkcd.com; "
             "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 RAW_CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
 
@@ -200,7 +200,7 @@ def page(title, body, status=200):
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/app.js" defer></script>
 </head><body>
-<header><a href="/" class="logo">🐴 HorseBin</a><span class="tag">pastes you can remember</span></header>
+<header><a href="/" class="logo">🐴 HorseBin</a><a class="tag" href="https://xkcd.com/936/">correct horse battery <s>staple</s> paste</a></header>
 <main>{body}</main>
 <footer>Solving <a href="https://xkcd.com/">xkcd</a> one comic at a time · <a href="https://xkcd.com/936/">#936</a> ✓ · <a href="/about">about</a></footer>
 </body></html>"""
@@ -217,6 +217,13 @@ def home():
         f'<option value="{k}"{" selected" if k == DEFAULT_TTL else ""}>{TTL_LABEL[k]}{" (4 words)" if TTLS[k] >= 86400 else ""}</option>'
         for k in TTLS)
     return page("HorseBin", f"""
+<section class="hero">
+  <a href="https://xkcd.com/936/"><img src="https://imgs.xkcd.com/comics/password_strength.png" alt="xkcd 936: Password Strength"></a>
+  <blockquote>“Through 20 years of effort, we've successfully trained everyone to use <s>passwords</s> <b>paste URLs</b>
+  that are hard for humans to remember, but easy for computers to guess.”</blockquote>
+  <p class="muted">— <a href="https://xkcd.com/936/">xkcd #936</a>, lightly vandalized. HorseBin fixes it: every paste gets
+  <b>three words</b> instead of <code>xK9fQ2rT</code>. Remember them on the walk to the other computer.</p>
+</section>
 <section class="card">
   <h2>Got words?</h2>
   <form action="/go" method="get" class="go" autocomplete="off">
@@ -246,6 +253,9 @@ def about():
     bits4 = W.BITS_PER_WORD * 4
     return page("About HorseBin", f"""
 <section class="card prose">
+<figure class="comic"><a href="https://xkcd.com/936/"><img src="https://imgs.xkcd.com/comics/password_strength.png" alt="xkcd 936: Password Strength"></a>
+<figcaption><a href="https://xkcd.com/936/">xkcd #936 “Password Strength”</a> by Randall Munroe,
+<a href="https://creativecommons.org/licenses/by-nc/2.5/">CC BY-NC 2.5</a>. The entire reason this site exists.</figcaption></figure>
 <h2>Why</h2>
 <p>You're on one computer. You need a thing on the other computer, across the room.
 Pastebins give you <code>pastebin.com/xK9fQ2rT</code>, which you will forget by the time you stand up.
