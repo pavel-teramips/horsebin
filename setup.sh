@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs HorseBin on big-ku: system unit running ~/dev/horsebin/server.py on 127.0.0.1:3050
-# + public Caddy vhost horse.teramips.com (wildcard DNS already covers it).
+# + public Caddy vhost for staple.horse and horse.teramips.com (staple.horse A record in Cloudflare, DNS-only).
 # Run: sudo sh ~/dev/horsebin/setup.sh
 set -eu
 
@@ -24,7 +24,7 @@ ReadWritePaths=/home/pavelr/horsebin
 PrivateTmp=yes
 Environment=HORSEBIN_DIR=/home/pavelr/horsebin
 Environment=HORSEBIN_PORT=3050
-Environment=HORSEBIN_SITE=horse.teramips.com
+Environment=HORSEBIN_SITE=staple.horse
 Environment=HORSEBIN_MAX_MB=25
 Environment=HORSEBIN_MAX_TOTAL_MB=2048
 Environment=HORSEBIN_MAX_PER_IP_MB=200
@@ -34,9 +34,9 @@ WantedBy=multi-user.target
 EOF
 
 cat > /etc/caddy/sites-enabled/horsebin.caddy <<'EOF'
-# horse.teramips.com — HorseBin, public pastebin with 3-word URLs (xkcd 936). Deliberately no auth.
+# staple.horse + horse.teramips.com — HorseBin, public pastebin with 3-word URLs (xkcd 936). Deliberately no auth.
 # ~/dev/horsebin/server.py as horsebin.service on 127.0.0.1:3050. Setup: sudo sh ~/dev/horsebin/setup.sh
-horse.teramips.com {
+staple.horse, horse.teramips.com {
     encode gzip zstd
     request_body {
         max_size 27MB
@@ -61,4 +61,4 @@ caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 systemctl reload caddy
 sleep 2
 curl -s -o /dev/null -w 'horsebin local: %{http_code}\n' http://127.0.0.1:3050/
-curl -s -o /dev/null -w 'horsebin public: %{http_code}\n' https://horse.teramips.com/ || echo "public check failed (cert may still be issuing; retry in a minute)"
+curl -s -o /dev/null -w "horsebin public: %{http_code}\n" https://staple.horse/ || echo "public check failed (cert may still be issuing; retry in a minute)"

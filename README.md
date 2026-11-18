@@ -29,4 +29,4 @@ Dev: `HORSEBIN_DIR=/tmp/hb HORSEBIN_PORT=3059 python3 server.py`
 
 ## Later
 
-- Buy `staple.horse` → add it to the Caddy site block and set `HORSEBIN_SITE`.
+- Domains: `staple.horse` (primary, Cloudflare Registrar, DNS-only A → 188.120.135.68) + `horse.teramips.com`.
