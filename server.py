@@ -28,6 +28,7 @@ DATA = Path(os.environ.get("HORSEBIN_DIR", str(Path.home() / "horsebin")))
 HOST = os.environ.get("HORSEBIN_HOST", "127.0.0.1")
 PORT = int(os.environ.get("HORSEBIN_PORT", "3050"))
 SITE = os.environ.get("HORSEBIN_SITE", "horse.teramips.com")
+ABUSE = os.environ.get("HORSEBIN_ABUSE", "horse-abuse@trips.teramips.com")
 MAX_BYTES = int(os.environ.get("HORSEBIN_MAX_MB", "25")) * 1024 * 1024
 MAX_TOTAL = int(os.environ.get("HORSEBIN_MAX_TOTAL_MB", "2048")) * 1024 * 1024
 MAX_PER_IP = int(os.environ.get("HORSEBIN_MAX_PER_IP_MB", "200")) * 1024 * 1024
@@ -202,7 +203,7 @@ def page(title, body, status=200):
 </head><body>
 <header><a href="/" class="logo">🐴 HorseBin</a><a class="tag" href="https://xkcd.com/936/">correct horse battery <s>staple</s> paste</a></header>
 <main>{body}</main>
-<footer>Solving <a href="https://xkcd.com/">xkcd</a> one comic at a time · <a href="https://xkcd.com/936/">#936</a> ✓ · <a href="/about">about</a></footer>
+<footer>Solving <a href="https://xkcd.com/">xkcd</a> one comic at a time · <a href="https://xkcd.com/936/">#936</a> ✓ · <a href="/about">about</a> · <a href="/terms">terms</a></footer>
 </body></html>"""
     return status, "text/html; charset=utf-8", doc.encode()
 
@@ -283,6 +284,52 @@ Want it gone right after it's read? Tick <i>burn after reading</i>.</p>
 echo hello | curl --data-binary @- {SITE}
 curl -T x.png "{SITE}/x.png?ttl=1h&amp;burn=1"
 curl {SITE}/fruit-ladder-oyster          # download (raw)</pre>
+</section>""")
+
+
+def terms():
+    mb = MAX_BYTES // 1024 // 1024
+    return page("HorseBin terms", f"""
+<section class="card prose">
+<h2>Terms of use</h2>
+<p>Short version: HorseBin is a free toy for moving text between your own computers. Be nice, don't be evil,
+expect nothing.</p>
+
+<h2>What it is</h2>
+<ul>
+  <li>Pastes are <b>public to anyone who has the words</b>. Three words is a small space (about 30 bits);
+  it is protected by rate limits and short lifetimes, not by secrecy.</li>
+  <li>Pastes are <b>not encrypted</b> on the server. They travel over HTTPS but are stored as-is.</li>
+  <li>Burned pastes, and pastes deleted with <i>delete / report abuse</i>, are destroyed immediately.
+  No backups are kept.</li>
+  <li>Limits: {mb} MB per paste, plus per-IP rate and storage limits. They can change without notice.</li>
+</ul>
+
+<h2>Don't use it for</h2>
+<ul>
+  <li>Anything illegal where you are or where this server is.</li>
+  <li>Malware, phishing, spam, credential dumps, personal data about other people, or content you don't have the
+  right to share.</li>
+  <li>Passwords, keys and other secrets. Seriously.</li>
+  <li>Hosting files for the public, hotlinking, or as a CDN. It's a short-term clipboard, not a file host.</li>
+</ul>
+<p>We may delete any paste, block any IP, or shut the whole thing down, at any time, without notice or reason.</p>
+
+<h2>Privacy</h2>
+<p>We log the IP address, time, size and filename of each paste, plus standard web server access logs
+(which include the words in the URL). Logs are used to run the service and fight abuse, are kept for a limited
+time, and are not sold or shared except where the law requires it. No cookies, no analytics, no ads.</p>
+
+<h2>No warranty</h2>
+<p>HorseBin is provided <b>as is</b>, with no warranty of any kind. It may lose your paste, show it to someone else,
+or be down when you need it. You use it at your own risk, and to the extent the law allows, its operator is not
+liable for anything that results.</p>
+
+<h2>Abuse &amp; takedown</h2>
+<p>If you have the words, press <i>delete / report abuse</i> on the paste — it's gone immediately.
+Otherwise write to <a href="mailto:{E(ABUSE)}">{E(ABUSE)}</a>.</p>
+
+<p class="muted">Using HorseBin means you accept these terms. They may change; the version on this page is the one that applies.</p>
 </section>""")
 
 
@@ -454,6 +501,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_page(home())
         if path == "/about":
             return self.send_page(about())
+        if path == "/terms":
+            return self.send_page(terms())
         if path.startswith("/static/"):
             return self.static(path[8:])
         if path == "/go":

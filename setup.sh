@@ -28,6 +28,7 @@ Environment=HORSEBIN_SITE=staple.horse
 Environment=HORSEBIN_MAX_MB=25
 Environment=HORSEBIN_MAX_TOTAL_MB=2048
 Environment=HORSEBIN_MAX_PER_IP_MB=200
+Environment=HORSEBIN_ABUSE=horse-abuse@trips.teramips.com
 
 [Install]
 WantedBy=multi-user.target

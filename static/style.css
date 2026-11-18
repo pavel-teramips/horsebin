@@ -113,3 +113,5 @@ img.preview { max-width: 100%; border-radius: 10px; border: 1px solid var(--line
 }
 .steps code { white-space: nowrap; }
 .why { margin-top: 28px; }
+.prose ul { padding-left: 1.2em; margin: 6px 0 10px; }
+.prose li { margin: 4px 0; }
