@@ -27,6 +27,7 @@ Environment=HORSEBIN_PORT=3050
 Environment=HORSEBIN_SITE=horse.teramips.com
 Environment=HORSEBIN_MAX_MB=25
 Environment=HORSEBIN_MAX_TOTAL_MB=2048
+Environment=HORSEBIN_MAX_PER_IP_MB=200
 
 [Install]
 WantedBy=multi-user.target

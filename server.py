@@ -30,6 +30,7 @@ PORT = int(os.environ.get("HORSEBIN_PORT", "3050"))
 SITE = os.environ.get("HORSEBIN_SITE", "horse.teramips.com")
 MAX_BYTES = int(os.environ.get("HORSEBIN_MAX_MB", "25")) * 1024 * 1024
 MAX_TOTAL = int(os.environ.get("HORSEBIN_MAX_TOTAL_MB", "2048")) * 1024 * 1024
+MAX_PER_IP = int(os.environ.get("HORSEBIN_MAX_PER_IP_MB", "200")) * 1024 * 1024
 PREVIEW_BYTES = 1024 * 1024
 
 TTLS = {"5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
@@ -113,6 +114,10 @@ def prune():
     for f in BLOBS.iterdir():  # orphans from crashes
         if f.name not in known and time.time() - f.stat().st_mtime > 300:
             f.unlink(missing_ok=True)
+
+
+def ip_bytes(ip):
+    return q("SELECT coalesce(sum(size),0) FROM paste WHERE ip=? AND expires>?", ip, time.time())[0][0]
 
 
 def total_bytes():
@@ -583,6 +588,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply_err(400, "Nothing to paste. It's empty.", from_form)
         if len(data) > MAX_BYTES:
             return self.reply_err(413, f"Too big. Max {MAX_BYTES // 1024 // 1024} MB.", from_form)
+        if ip_bytes(ip) + len(data) > MAX_PER_IP:
+            return self.reply_err(429, f"Your stall is full: you already have {fmt_size(ip_bytes(ip))} of live pastes "
+                                       f"(max {MAX_PER_IP // 1024 // 1024} MB). Wait for some to expire.", from_form)
         if total_bytes() + len(data) > MAX_TOTAL:
             return self.reply_err(507, "The stable is full. Try again later.", from_form)
         if ttl not in TTLS:
