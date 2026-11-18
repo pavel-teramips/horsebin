@@ -43,7 +43,7 @@ NEW_LIMIT, NEW_WINDOW = 30, 600        # pastes per IP per 10 min
 INLINE_IMAGES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 CLI_UA = re.compile(r"^(curl|wget|httpie|python-requests|python-urllib|go-http|powershell|libwww|aria2|fetch)", re.I)
 
-PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://imgs.xkcd.com; "
+PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: "
             "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 RAW_CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
 
@@ -251,12 +251,8 @@ def home():
   <div id="qhint" class="hint">Just the first 3 letters of each word work too: <code>fru lad oys</code></div>
 </section>
 </div>
-<section class="hero">
-  <p>Why words? Because <a href="https://xkcd.com/936/">xkcd #936</a> was right:</p>
-  <a href="https://xkcd.com/936/"><img src="https://imgs.xkcd.com/comics/password_strength.png" alt="xkcd 936: Password Strength"></a>
-  <p class="muted">Pastebins give you <code>xK9fQ2rT</code>. You forget it before you stand up. ·
-  Terminal: <code>curl -T file.txt {SITE}</code></p>
-</section>
+<p class="muted center why">Why words? <a href="https://xkcd.com/936/" title="xkcd #936 “Password Strength”: humans remember words, not xK9fQ2rT">xkcd #936</a> ·
+Terminal: <code>curl -T file.txt {SITE}</code></p>
 """)
 
 
@@ -265,9 +261,6 @@ def about():
     bits4 = W.BITS_PER_WORD * 4
     return page("About HorseBin", f"""
 <section class="card prose">
-<figure class="comic"><a href="https://xkcd.com/936/"><img src="https://imgs.xkcd.com/comics/password_strength.png" alt="xkcd 936: Password Strength"></a>
-<figcaption><a href="https://xkcd.com/936/">xkcd #936 “Password Strength”</a> by Randall Munroe,
-<a href="https://creativecommons.org/licenses/by-nc/2.5/">CC BY-NC 2.5</a>. The entire reason this site exists.</figcaption></figure>
 <h2>Why</h2>
 <p>You're on one computer. You need a thing on the other computer, across the room.
 Pastebins give you <code>pastebin.com/xK9fQ2rT</code>, which you will forget by the time you stand up.

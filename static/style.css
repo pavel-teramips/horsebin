@@ -92,15 +92,6 @@ img.preview { max-width: 100%; border-radius: 10px; border: 1px solid var(--line
 .tag { text-decoration: none; }
 .tag:hover { color: var(--accent); }
 .tag s { opacity: 0.7; }
-.hero { margin: 16px 0 8px; text-align: center; }
-.hero img { width: min(100%, 520px); }
-.hero img, .comic img { max-width: 100%; height: auto; border-radius: 10px; background: #fff; padding: 8px; border: 1px solid var(--line); }
-.hero blockquote { font-size: 1.15rem; font-style: italic; margin: 14px auto 6px; max-width: 620px; }
-.hero blockquote s { color: var(--muted); }
-.hero blockquote b { color: var(--accent); font-style: normal; }
-.hero p { margin: 4px auto 0; max-width: 620px; }
-.comic { margin: 0 0 16px; text-align: center; }
-.comic figcaption { color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
 
 .how { text-align: center; margin: 12px 0 4px; }
 .how h1 { font-size: clamp(1.4rem, 4vw, 2rem); line-height: 1.25; margin: 8px 0 18px; letter-spacing: -0.01em; }
@@ -114,8 +105,6 @@ img.preview { max-width: 100%; border-radius: 10px; border: 1px solid var(--line
 .recv .go input { font-size: 1.2rem; }
 .opts { margin-top: 10px; color: var(--muted); }
 .opts summary { cursor: pointer; font-size: 0.9rem; }
-.hero { margin-top: 32px; }
-.hero > p:first-child { font-size: 1.1rem; }
 @media (max-width: 760px) {
   .steps { grid-template-columns: 1fr; }
   .duo { grid-template-columns: 1fr; }
@@ -123,3 +112,4 @@ img.preview { max-width: 100%; border-radius: 10px; border: 1px solid var(--line
   textarea { min-height: 110px; }
 }
 .steps code { white-space: nowrap; }
+.why { margin-top: 28px; }
