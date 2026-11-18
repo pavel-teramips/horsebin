@@ -217,34 +217,46 @@ def home():
         f'<option value="{k}"{" selected" if k == DEFAULT_TTL else ""}>{TTL_LABEL[k]}{" (4 words)" if TTLS[k] >= 86400 else ""}</option>'
         for k in TTLS)
     return page("HorseBin", f"""
-<section class="hero">
-  <a href="https://xkcd.com/936/"><img src="https://imgs.xkcd.com/comics/password_strength.png" alt="xkcd 936: Password Strength"></a>
-  <blockquote>“Through 20 years of effort, we've successfully trained everyone to use <s>passwords</s> <b>paste URLs</b>
-  that are hard for humans to remember, but easy for computers to guess.”</blockquote>
-  <p class="muted">— <a href="https://xkcd.com/936/">xkcd #936</a>, lightly vandalized. HorseBin fixes it: every paste gets
-  <b>three words</b> instead of <code>xK9fQ2rT</code>. Remember them on the walk to the other computer.</p>
+<section class="how">
+  <h1>Move stuff to another computer by remembering 3 words.</h1>
+  <ol class="steps">
+    <li><span class="n">1</span><span><b>Paste</b> text or drop a file below</span></li>
+    <li><span class="n">2</span><span>You get <b>3 words</b>, like <code>fruit ladder oyster</code></span></li>
+    <li><span class="n">3</span><span>On the other computer, open <b>{SITE}</b> and <b>type them</b></span></li>
+  </ol>
 </section>
-<section class="card">
-  <h2>Got words?</h2>
-  <form action="/go" method="get" class="go" autocomplete="off">
-    <input name="q" id="q" placeholder="correct horse battery" autofocus spellcheck="false" autocapitalize="off">
-    <button>Fetch</button>
-  </form>
-  <div id="qhint" class="hint">First three letters of each word are enough: <code>fru lad oys</code></div>
-</section>
-<section class="card">
-  <h2>Or make some</h2>
+<div class="duo">
+<section class="card send">
+  <h2>📤 Send</h2>
   <form action="/new" method="post" enctype="multipart/form-data" id="newform">
-    <textarea name="text" id="text" placeholder="Paste text here, drop a file anywhere, or Ctrl+V a screenshot"></textarea>
+    <textarea name="text" id="text" placeholder="Paste text here — or drop a file / Ctrl+V a screenshot anywhere on the page"></textarea>
     <div class="row">
+      <button class="primary">Get my 3 words</button>
       <label class="file"><input type="file" name="file" id="file"><span id="filename">📎 attach a file</span></label>
-      <label>gone after <select name="ttl">{ttl_opts}</select></label>
-      <label class="chk"><input type="checkbox" name="burn" value="1"> burn after reading</label>
-      <button class="primary">Get words</button>
     </div>
+    <details class="opts"><summary>options</summary>
+      <div class="row">
+        <label>gone after <select name="ttl">{ttl_opts}</select></label>
+        <label class="chk"><input type="checkbox" name="burn" value="1"> burn after reading</label>
+      </div>
+    </details>
   </form>
 </section>
-<p class="muted center">Or from a terminal: <code>curl -T file.txt {SITE}</code> · <code>echo hi | curl --data-binary @- {SITE}</code></p>
+<section class="card recv">
+  <h2>📥 Receive</h2>
+  <form action="/go" method="get" class="go" autocomplete="off">
+    <input name="q" id="q" placeholder="type the 3 words" spellcheck="false" autocapitalize="off">
+    <button>Open</button>
+  </form>
+  <div id="qhint" class="hint">Just the first 3 letters of each word work too: <code>fru lad oys</code></div>
+</section>
+</div>
+<section class="hero">
+  <p>Why words? Because <a href="https://xkcd.com/936/">xkcd #936</a> was right:</p>
+  <a href="https://xkcd.com/936/"><img src="https://imgs.xkcd.com/comics/password_strength.png" alt="xkcd 936: Password Strength"></a>
+  <p class="muted">Pastebins give you <code>xK9fQ2rT</code>. You forget it before you stand up. ·
+  Terminal: <code>curl -T file.txt {SITE}</code></p>
+</section>
 """)
 
 

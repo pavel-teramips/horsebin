@@ -90,6 +90,19 @@
     q.addEventListener("input", render);
   }
 
+  // ---- nothing focused: typing letters goes to Receive, pasting text goes to Send
+  addEventListener("keydown", e => {
+    const a = document.activeElement;
+    if (!q || (a && /INPUT|TEXTAREA|SELECT|BUTTON/.test(a.tagName))) return;
+    if (e.key.length === 1 && /[a-z]/i.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) q.focus();
+  });
+  addEventListener("paste", e => {
+    const a = document.activeElement, t = $("#text");
+    if (!t || (a && /INPUT|TEXTAREA/.test(a.tagName)) || e.clipboardData?.files?.length) return;
+    const s = e.clipboardData?.getData("text"); if (!s) return;
+    e.preventDefault(); t.value = s; t.focus();
+  });
+
   // ---- files: drag & drop anywhere, Ctrl+V images, show chosen name
   const file = $("#file"), fname = $("#filename"), text = $("#text");
   if (file) {
