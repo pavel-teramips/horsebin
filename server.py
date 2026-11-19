@@ -34,9 +34,15 @@ MAX_TOTAL = int(os.environ.get("HORSEBIN_MAX_TOTAL_MB", "2048")) * 1024 * 1024
 MAX_PER_IP = int(os.environ.get("HORSEBIN_MAX_PER_IP_MB", "200")) * 1024 * 1024
 PREVIEW_BYTES = 1024 * 1024
 
-TTLS = {"5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
-DEFAULT_TTL = "15m"
-TTL_LABEL = {"5m": "5 minutes", "15m": "15 minutes", "1h": "1 hour", "1d": "1 day"}
+TTLS = {"1h": 3600, "1w": 7 * 86400, "forever": None}   # None = never expires
+DEFAULT_TTL = "1h"
+TTL_LABEL = {"1h": "1 hour", "1w": "1 week", "forever": "forever"}
+TTL_ALIAS = {"hour": "1h", "60m": "1h", "week": "1w", "7d": "1w", "never": "forever", "0": "forever", "inf": "forever"}
+
+
+def words_for(ttl_key):
+    """Short-lived pastes get 3 words; anything that sticks around gets 4 (~40 bits)."""
+    return 3 if ttl_key == "1h" else 4
 
 MISS_LIMIT, MISS_WINDOW = 20, 600      # wrong guesses per IP per 10 min
 NEW_LIMIT, NEW_WINDOW = 30, 600        # pastes per IP per 10 min
@@ -44,7 +50,7 @@ NEW_LIMIT, NEW_WINDOW = 30, 600        # pastes per IP per 10 min
 INLINE_IMAGES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 CLI_UA = re.compile(r"^(curl|wget|httpie|python-requests|python-urllib|go-http|powershell|libwww|aria2|fetch)", re.I)
 
-PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: "
+PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
             "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 RAW_CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
 
@@ -54,11 +60,25 @@ BLOBS = DATA / "blobs"
 BLOBS.mkdir(parents=True, exist_ok=True)
 DB = sqlite3.connect(DATA / "horsebin.db", check_same_thread=False, isolation_level=None)
 DB.execute("PRAGMA journal_mode=WAL")
-DB.execute("""CREATE TABLE IF NOT EXISTS paste (
+# Every row keeps its expiry date (NULL = forever). Expired rows are NOT deleted: they stay
+# (data included) until a future compaction job, but are never served again. Phrases are never
+# reused, so old words can't ever open someone else's newer paste.
+# `deleted` is set when the content was actually destroyed (burned / deleted / report abuse).
+SCHEMA = """CREATE TABLE IF NOT EXISTS paste (
     phrase TEXT PRIMARY KEY, blob TEXT NOT NULL, filename TEXT, mime TEXT,
-    size INTEGER NOT NULL, created REAL NOT NULL, expires REAL NOT NULL,
-    burn INTEGER NOT NULL DEFAULT 0, views INTEGER NOT NULL DEFAULT 0, ip TEXT)""")
+    size INTEGER NOT NULL, created REAL NOT NULL, expires REAL,
+    burn INTEGER NOT NULL DEFAULT 0, views INTEGER NOT NULL DEFAULT 0, ip TEXT,
+    deleted REAL)"""
+DB.execute(SCHEMA)
+if "deleted" not in [r[1] for r in DB.execute("PRAGMA table_info(paste)")]:  # v1 -> v2 migration
+    DB.executescript("BEGIN; ALTER TABLE paste RENAME TO paste_v1; " + SCHEMA + "; "
+                     "INSERT INTO paste (phrase, blob, filename, mime, size, created, expires, burn, views, ip) "
+                     "SELECT phrase, blob, filename, mime, size, created, expires, burn, views, ip FROM paste_v1; "
+                     "DROP TABLE paste_v1; COMMIT;")
+DB.execute("CREATE INDEX IF NOT EXISTS paste_ip ON paste(ip)")
 LOCK = threading.Lock()
+LIVE = "deleted IS NULL AND (expires IS NULL OR expires > ?)"
+KEYS = ("phrase", "blob", "filename", "mime", "size", "created", "expires", "burn", "views", "deleted")
 
 
 def q(sql, *args):
@@ -66,29 +86,37 @@ def q(sql, *args):
         return DB.execute(sql, args).fetchall()
 
 
+def get_any(phrase):
+    """Row for this phrase whatever its state (live, expired or deleted), or None."""
+    rows = q(f"SELECT {', '.join(KEYS)} FROM paste WHERE phrase=?", phrase)
+    return dict(zip(KEYS, rows[0])) if rows else None
+
+
+def is_live(p):
+    return p["deleted"] is None and (p["expires"] is None or p["expires"] > time.time())
+
+
 def get(phrase):
-    rows = q("SELECT phrase, blob, filename, mime, size, created, expires, burn, views "
-             "FROM paste WHERE phrase=? AND expires>?", phrase, time.time())
-    if not rows:
-        return None
-    keys = ("phrase", "blob", "filename", "mime", "size", "created", "expires", "burn", "views")
-    return dict(zip(keys, rows[0]))
+    p = get_any(phrase)
+    return p if p and is_live(p) else None
 
 
 def delete(phrase):
-    rows = q("DELETE FROM paste WHERE phrase=? RETURNING blob", phrase)
+    """Destroy the content now (burn / delete / abuse). The row stays as a tombstone so the
+    phrase is never handed out again."""
+    rows = q("UPDATE paste SET deleted=? WHERE phrase=? AND deleted IS NULL RETURNING blob", time.time(), phrase)
     for (b,) in rows:
         (BLOBS / b).unlink(missing_ok=True)
     return bool(rows)
 
 
 def live_count():
-    return q("SELECT count(*) FROM paste WHERE expires>?", time.time())[0][0]
+    return q(f"SELECT count(*) FROM paste WHERE {LIVE}", time.time())[0][0]
 
 
 def create(data, filename, mime, ttl_key, burn, ip):
     ttl = TTLS[ttl_key]
-    n = 4 if ttl >= 86400 else 3
+    n = words_for(ttl_key)
     blob = secrets.token_hex(16)
     (BLOBS / blob).write_bytes(data)
     now = time.time()
@@ -96,33 +124,31 @@ def create(data, filename, mime, ttl_key, burn, ip):
         phrase = "-".join(W.generate(n))
         try:
             q("INSERT INTO paste (phrase, blob, filename, mime, size, created, expires, burn, ip) "
-              "VALUES (?,?,?,?,?,?,?,?,?)", phrase, blob, filename, mime, len(data), now, now + ttl, int(burn), ip)
+              "VALUES (?,?,?,?,?,?,?,?,?)", phrase, blob, filename, mime, len(data), now,
+              None if ttl is None else now + ttl, int(burn), ip)
             return phrase
         except sqlite3.IntegrityError:
-            # taken: if the holder already expired, evict it and retry this same phrase
-            old = q("SELECT expires FROM paste WHERE phrase=?", phrase)
-            if old and old[0][0] <= now:
-                delete(phrase)
+            pass  # phrase used before (live, expired or deleted) — never reuse, draw again
     (BLOBS / blob).unlink(missing_ok=True)
     raise RuntimeError("could not find a free phrase")
 
 
 def prune():
-    rows = q("DELETE FROM paste WHERE expires<=? RETURNING blob", time.time())
-    for (b,) in rows:
-        (BLOBS / b).unlink(missing_ok=True)
-    known = {b for (b,) in q("SELECT blob FROM paste")}
+    """Only removes orphaned blobs (crash leftovers). Expired pastes are kept for a future
+    compaction job; they are already unreachable because every read checks is_live()."""
+    known = {b for (b,) in q("SELECT blob FROM paste WHERE deleted IS NULL")}
     for f in BLOBS.iterdir():  # orphans from crashes
         if f.name not in known and time.time() - f.stat().st_mtime > 300:
             f.unlink(missing_ok=True)
 
 
 def ip_bytes(ip):
-    return q("SELECT coalesce(sum(size),0) FROM paste WHERE ip=? AND expires>?", ip, time.time())[0][0]
+    return q(f"SELECT coalesce(sum(size),0) FROM paste WHERE ip=? AND {LIVE}", ip, time.time())[0][0]
 
 
 def total_bytes():
-    return q("SELECT coalesce(sum(size),0) FROM paste")[0][0]
+    """Bytes on disk: live + expired-but-not-yet-compacted."""
+    return q("SELECT coalesce(sum(size),0) FROM paste WHERE deleted IS NULL")[0][0]
 
 
 def pruner():
@@ -131,7 +157,7 @@ def pruner():
             prune()
         except Exception as e:
             print("prune failed:", e, flush=True)
-        time.sleep(30)
+        time.sleep(300)
 
 # ---------------------------------------------------------------- rate limiting
 
@@ -180,8 +206,10 @@ def fmt_left(expires):
 
 
 def fmt_dur(s):
+    if s is None:
+        return "forever"
     s = round(s)
-    return next((f"{s // n} {u}{'s' if s // n != 1 else ''}" for n, u in ((86400, "day"), (3600, "hour"), (60, "minute")) if s >= n), f"{s} seconds")
+    return next((f"{s // n} {u}{'s' if s // n != 1 else ''}" for n, u in ((7 * 86400, "week"), (86400, "day"), (3600, "hour"), (60, "minute")) if s >= n), f"{s} seconds")
 
 
 def fmt_size(n):
@@ -215,7 +243,7 @@ def words_html(words, big=True):
 
 def home():
     ttl_opts = "".join(
-        f'<option value="{k}"{" selected" if k == DEFAULT_TTL else ""}>{TTL_LABEL[k]}{" (4 words)" if TTLS[k] >= 86400 else ""}</option>'
+        f'<option value="{k}"{" selected" if k == DEFAULT_TTL else ""}>{TTL_LABEL[k]}{" (4 words)" if words_for(k) == 4 else ""}</option>'
         for k in TTLS)
     return page("HorseBin", f"""
 <section class="how">
@@ -269,9 +297,11 @@ Pastebins give you <code>pastebin.com/xK9fQ2rT</code>, which you will forget by 
 So HorseBin gives you three words.</p>
 <h2>How safe is it?</h2>
 <p>Three words from a list of {len(W.WORDS)} is about <b>{bits3:.0f} bits</b> — terrible for a password,
-fine for something that lives 15 minutes behind a rate limit of {MISS_LIMIT} wrong guesses per 10 minutes.
+fine for something that lives an hour behind a rate limit of {MISS_LIMIT} wrong guesses per 10 minutes.
 At that rate a guesser needs about <b>{years_to_brute_force():,.0f} years</b> to hit anything right now.
-Pastes that live a day get a fourth word ({bits4:.0f} bits).</p>
+Pastes that live a week or forever get a fourth word ({bits4:.0f} bits).</p>
+<p>When a paste expires it is <b>gone for good</b>: it can never be opened again, and its words are never handed
+out to anyone else.</p>
 <p>It is still a public pastebin: don't put secrets here you wouldn't write on a whiteboard.
 Want it gone right after it's read? Tick <i>burn after reading</i>.</p>
 <h2>Typing</h2>
@@ -298,10 +328,11 @@ expect nothing.</p>
 <h2>What it is</h2>
 <ul>
   <li>Pastes are <b>public to anyone who has the words</b>. Three words is a small space (about 30 bits);
-  it is protected by rate limits and short lifetimes, not by secrecy.</li>
+  it is protected by rate limits, not by secrecy. Pastes kept for a week or forever get a fourth word.</li>
   <li>Pastes are <b>not encrypted</b> on the server. They travel over HTTPS but are stored as-is.</li>
   <li>Burned pastes, and pastes deleted with <i>delete / report abuse</i>, are destroyed immediately.
   No backups are kept.</li>
+  <li>"Forever" means as long as this service exists. No promises.</li>
   <li>Limits: {mb} MB per paste, plus per-IP rate and storage limits. They can change without notice.</li>
 </ul>
 
@@ -347,9 +378,11 @@ def view_page(p, new=False):
     <code class="url" id="url">{E(url)}</code>
     <button class="copy" data-copy="#url">copy link</button>
   </div>
-  <p class="muted">{W.BITS_PER_WORD * len(words):.0f} bits of entropy. Plenty for {E(fmt_dur(p['expires'] - p['created']))}, Randall.</p>
+  <p class="muted">{W.BITS_PER_WORD * len(words):.0f} bits of entropy. {"Plenty for " + E(fmt_dur(p['expires'] - p['created'])) if p['expires'] else "Forever is a long time, so you got a fourth word"}, Randall.</p>
 </section>"""
-    meta = (f'<div class="meta">gone in <span class="left" data-expires="{p["expires"]:.0f}">{fmt_left(p["expires"])}</span>'
+    life = (f'gone in <span class="left" data-expires="{p["expires"]:.0f}">{fmt_left(p["expires"])}</span>'
+            if p["expires"] else "never expires")
+    meta = (f'<div class="meta">{life}'
             f'{" · 🔥 burns after reading" if p["burn"] else ""} · {fmt_size(p["size"])}'
             f'{" · " + E(p["filename"]) if p["filename"] else ""}</div>')
     ph = quote(p["phrase"])
@@ -406,6 +439,19 @@ def not_found(typed, resolved):
     <input name="q" value="{E(typed)}" spellcheck="false" autocapitalize="off"><button>Try again</button>
   </form>
 </section>""", 404)
+
+
+def gone_page(p):
+    when = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(p["deleted"] or p["expires"]))
+    what = "was deleted" if p["deleted"] else "expired"
+    return page("Gone", f"""
+<section class="card center">
+  <div class="huge">🐴⌛</div>
+  <h2>This paste {what}.</h2>
+  <p class="muted">{"Deleted" if p["deleted"] else "Expired"} {E(when)}.</p>
+  <p>Once a paste is gone it can't be opened again, by anyone, and its words are never reused.</p>
+  <p><a href="/">make a new one</a></p>
+</section>""", 410)
 
 
 def xkcd_page():
@@ -560,7 +606,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_page(locked_page()) if not self.cli else self.text(429, f"Whoa there. Try again in 10 minutes.\n")
         words = W.resolve(typed)
         phrase = "-".join(words) if words else None
-        p = get(phrase) if phrase else None
+        p = get_any(phrase) if phrase else None
+        if p and not is_live(p):
+            hit("miss", ip)
+            if self.cli:
+                return self.text(410, "Gone: this paste expired or was deleted. It can't be opened again.\n")
+            return self.send_page(gone_page(p))
         if not p:
             hit("miss", ip)
             if self.cli:
@@ -657,8 +708,9 @@ class Handler(BaseHTTPRequestHandler):
                                        f"(max {MAX_PER_IP // 1024 // 1024} MB). Wait for some to expire.", from_form)
         if total_bytes() + len(data) > MAX_TOTAL:
             return self.reply_err(507, "The stable is full. Try again later.", from_form)
+        ttl = TTL_ALIAS.get(ttl.lower(), ttl.lower())
         if ttl not in TTLS:
-            ttl = DEFAULT_TTL
+            return self.reply_err(400, f"Unknown ttl {ttl!r}. Use one of: {', '.join(TTLS)}.", from_form)
         if filename:
             filename = re.sub(r"[\x00-\x1f/\\]", "_", filename)[:200]
             mime = mimetypes.guess_type(filename)[0]
@@ -669,7 +721,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.cli or not from_form:
             return self.text(200,
                              f"https://{SITE}/{phrase}\n\n   {'  '.join(w.upper() for w in words)}\n\n"
-                             f"   {W.mnemonic(words)}\n   gone in {TTL_LABEL[ttl]}{', burns after reading' if burn else ''}.\n")
+                             f"   {W.mnemonic(words)}\n   {'never expires' if TTLS[ttl] is None else 'gone in ' + TTL_LABEL[ttl]}"
+                             f"{', burns after reading' if burn else ''}.\n")
         self.redirect(f"/{phrase}?new")
 
     def reply_err(self, status, msg, from_form):
@@ -717,7 +770,7 @@ def usage():
 
   curl -T notes.txt {SITE}                   upload a file
   echo hello | curl --data-binary @- {SITE}  upload text
-  curl -T x.png "{SITE}/x.png?ttl=1h&burn=1" ttl: 5m 15m 1h 1d (1d = 4 words); burn after reading
+  curl -T x.png "{SITE}/x.png?ttl=1h&burn=1" ttl: 1h (default), 1w, forever (1w/forever = 4 words); burn after reading
   curl {SITE}/fruit-ladder-oyster           download (first 3 letters of each word are enough)
 """
 
