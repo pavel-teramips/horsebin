@@ -179,7 +179,6 @@ def pruner():
     while True:
         try:
             prune()
-            compact()
         except Exception as e:
             print("prune failed:", e, flush=True)
         time.sleep(300)
