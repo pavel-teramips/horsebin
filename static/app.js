@@ -138,5 +138,15 @@
     });
     // Enter in the words box shouldn't be confused with Ctrl+Enter submit of the paste box
     text.addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("#newform").requestSubmit(); });
+    // Empty submit: say so right here instead of navigating to an error page
+    $("#newform").addEventListener("submit", e => {
+      if (!text.value.trim() && !file.files.length) {
+        e.preventDefault();
+        text.setCustomValidity("Paste some text here first, or attach a file.");
+        text.reportValidity(); text.focus();
+      }
+    });
+    text.addEventListener("input", () => text.setCustomValidity(""));
+    file.addEventListener("change", () => text.setCustomValidity(""));
   }
 })();
