@@ -7,7 +7,7 @@ computer. Solving xkcd one comic at a time: [#936](https://xkcd.com/936/).
   Every word has a unique 3-letter prefix, so `fru lad oys` == `fruit-ladder-oyster`. Typos are
   fixed by edit distance; `fruitladderoyster` is segmented. Logic in `words.py`, mirrored in `static/app.js`
   for the live preview.
-- **Lifetimes:** 1h (default, 3 words) / 1w / forever (4 words). Every row stores its expiry (NULL = forever).
+- **Lifetimes:** 1h / 1w (default) — 3 words; forever — 4 words. Every row stores its expiry (NULL = forever).
   Expired rows are kept (data too) until auto-compaction (below), but are never served (410 Gone), and
   phrases are never reused. Burn/delete destroy the blob at once and leave a tombstone row (`deleted` set).
   Optional burn-after-reading

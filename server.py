@@ -36,14 +36,14 @@ COMPACT_AT = int(os.environ.get("HORSEBIN_COMPACT_MB", "1536")) * 1024 * 1024  #
 PREVIEW_BYTES = 1024 * 1024
 
 TTLS = {"1h": 3600, "1w": 7 * 86400, "forever": None}   # None = never expires
-DEFAULT_TTL = "1h"
+DEFAULT_TTL = "1w"
 TTL_LABEL = {"1h": "1 hour", "1w": "1 week", "forever": "forever"}
 TTL_ALIAS = {"hour": "1h", "60m": "1h", "week": "1w", "7d": "1w", "never": "forever", "0": "forever", "inf": "forever"}
 
 
 def words_for(ttl_key):
-    """Short-lived pastes get 3 words; anything that sticks around gets 4 (~40 bits)."""
-    return 3 if ttl_key == "1h" else 4
+    """3 words (~30 bits) for pastes that expire; forever ones pile up, so they get 4 (~40 bits)."""
+    return 4 if TTLS[ttl_key] is None else 3
 
 MISS_LIMIT, MISS_WINDOW = 20, 600      # wrong guesses per IP per 10 min
 NEW_LIMIT, NEW_WINDOW = 30, 600        # pastes per IP per 10 min
@@ -322,9 +322,9 @@ Pastebins give you <code>pastebin.com/xK9fQ2rT</code>, which you will forget by 
 So HorseBin gives you three words.</p>
 <h2>How safe is it?</h2>
 <p>Three words from a list of {len(W.WORDS)} is about <b>{bits3:.0f} bits</b> — terrible for a password,
-fine for something that lives an hour behind a rate limit of {MISS_LIMIT} wrong guesses per 10 minutes.
+fine for something that lives a week behind a rate limit of {MISS_LIMIT} wrong guesses per 10 minutes.
 At that rate a guesser needs about <b>{years_to_brute_force():,.0f} years</b> to hit anything right now.
-Pastes that live a week or forever get a fourth word ({bits4:.0f} bits).</p>
+Pastes kept forever get a fourth word ({bits4:.0f} bits).</p>
 <p>When a paste expires it is <b>gone for good</b>: it can never be opened again, and its words are never handed
 out to anyone else.</p>
 <p>It is still a public pastebin: don't put secrets here you wouldn't write on a whiteboard.
@@ -353,7 +353,7 @@ expect nothing.</p>
 <h2>What it is</h2>
 <ul>
   <li>Pastes are <b>public to anyone who has the words</b>. Three words is a small space (about 30 bits);
-  it is protected by rate limits, not by secrecy. Pastes kept for a week or forever get a fourth word.</li>
+  it is protected by rate limits, not by secrecy. Pastes kept forever get a fourth word.</li>
   <li>Pastes are <b>not encrypted</b> on the server. They travel over HTTPS but are stored as-is.</li>
   <li>Burned pastes, and pastes deleted with <i>delete / report abuse</i>, are destroyed immediately.
   No backups are kept.</li>
@@ -796,7 +796,7 @@ def usage():
 
   curl -T notes.txt {SITE}                   upload a file
   echo hello | curl --data-binary @- {SITE}  upload text
-  curl -T x.png "{SITE}/x.png?ttl=1h&burn=1" ttl: 1h (default), 1w, forever (1w/forever = 4 words); burn after reading
+  curl -T x.png "{SITE}/x.png?ttl=1h&burn=1" ttl: 1h, 1w (default), forever (= 4 words); burn after reading
   curl {SITE}/fruit-ladder-oyster           download (first 3 letters of each word are enough)
 """
 
