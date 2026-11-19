@@ -32,6 +32,7 @@ ABUSE = os.environ.get("HORSEBIN_ABUSE", "horse-abuse@trips.teramips.com")
 MAX_BYTES = int(os.environ.get("HORSEBIN_MAX_MB", "25")) * 1024 * 1024
 MAX_TOTAL = int(os.environ.get("HORSEBIN_MAX_TOTAL_MB", "2048")) * 1024 * 1024
 MAX_PER_IP = int(os.environ.get("HORSEBIN_MAX_PER_IP_MB", "200")) * 1024 * 1024
+COMPACT_AT = int(os.environ.get("HORSEBIN_COMPACT_MB", "1536")) * 1024 * 1024  # purge expired data above this
 PREVIEW_BYTES = 1024 * 1024
 
 TTLS = {"1h": 3600, "1w": 7 * 86400, "forever": None}   # None = never expires
@@ -75,6 +76,8 @@ if "deleted" not in [r[1] for r in DB.execute("PRAGMA table_info(paste)")]:  # v
                      "INSERT INTO paste (phrase, blob, filename, mime, size, created, expires, burn, views, ip) "
                      "SELECT phrase, blob, filename, mime, size, created, expires, burn, views, ip FROM paste_v1; "
                      "DROP TABLE paste_v1; COMMIT;")
+if "purged" not in [r[1] for r in DB.execute("PRAGMA table_info(paste)")]:  # v2 -> v3
+    DB.execute("ALTER TABLE paste ADD COLUMN purged REAL")  # expired content removed by compaction
 DB.execute("CREATE INDEX IF NOT EXISTS paste_ip ON paste(ip)")
 LOCK = threading.Lock()
 LIVE = "deleted IS NULL AND (expires IS NULL OR expires > ?)"
@@ -136,7 +139,7 @@ def create(data, filename, mime, ttl_key, burn, ip):
 def prune():
     """Only removes orphaned blobs (crash leftovers). Expired pastes are kept for a future
     compaction job; they are already unreachable because every read checks is_live()."""
-    known = {b for (b,) in q("SELECT blob FROM paste WHERE deleted IS NULL")}
+    known = {b for (b,) in q("SELECT blob FROM paste WHERE deleted IS NULL AND purged IS NULL")}
     for f in BLOBS.iterdir():  # orphans from crashes
         if f.name not in known and time.time() - f.stat().st_mtime > 300:
             f.unlink(missing_ok=True)
@@ -148,13 +151,35 @@ def ip_bytes(ip):
 
 def total_bytes():
     """Bytes on disk: live + expired-but-not-yet-compacted."""
-    return q("SELECT coalesce(sum(size),0) FROM paste WHERE deleted IS NULL")[0][0]
+    return q("SELECT coalesce(sum(size),0) FROM paste WHERE deleted IS NULL AND purged IS NULL")[0][0]
+
+
+_compact_lock = threading.Lock()
+
+
+def compact(incoming=0):
+    """Once stored data reaches COMPACT_AT, destroy the content of every expired paste.
+    Rows stay (tiny) as tombstones so their words are never reused and still answer 410."""
+    with _compact_lock:
+        before = total_bytes()
+        if before + incoming < COMPACT_AT:
+            return 0
+        rows = q("UPDATE paste SET purged=? WHERE purged IS NULL AND deleted IS NULL "
+                 "AND expires IS NOT NULL AND expires <= ? RETURNING blob, size", time.time(), time.time())
+        for b, _ in rows:
+            (BLOBS / b).unlink(missing_ok=True)
+        freed = sum(s for _, s in rows)
+        if rows:
+            print(f"compact: {len(rows)} expired pastes purged, {fmt_size(freed)} freed "
+                    f"({fmt_size(before)} -> {fmt_size(before - freed)})", flush=True)
+        return freed
 
 
 def pruner():
     while True:
         try:
             prune()
+            compact()
         except Exception as e:
             print("prune failed:", e, flush=True)
         time.sleep(300)
@@ -706,6 +731,7 @@ class Handler(BaseHTTPRequestHandler):
         if ip_bytes(ip) + len(data) > MAX_PER_IP:
             return self.reply_err(429, f"Your stall is full: you already have {fmt_size(ip_bytes(ip))} of live pastes "
                                        f"(max {MAX_PER_IP // 1024 // 1024} MB). Wait for some to expire.", from_form)
+        compact(incoming=len(data))
         if total_bytes() + len(data) > MAX_TOTAL:
             return self.reply_err(507, "The stable is full. Try again later.", from_form)
         ttl = TTL_ALIAS.get(ttl.lower(), ttl.lower())

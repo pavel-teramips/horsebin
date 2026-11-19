@@ -8,12 +8,13 @@ computer. Solving xkcd one comic at a time: [#936](https://xkcd.com/936/).
   fixed by edit distance; `fruitladderoyster` is segmented. Logic in `words.py`, mirrored in `static/app.js`
   for the live preview.
 - **Lifetimes:** 1h (default, 3 words) / 1w / forever (4 words). Every row stores its expiry (NULL = forever).
-  Expired rows are kept (data too) until a future compaction job, but are never served (410 Gone), and
+  Expired rows are kept (data too) until auto-compaction (below), but are never served (410 Gone), and
   phrases are never reused. Burn/delete destroy the blob at once and leave a tombstone row (`deleted` set).
   Optional burn-after-reading
   (browser needs a POST click to open, so link-preview bots don't burn it; HEAD doesn't burn).
 - **Limits:** 25 MB per paste, 200 MB live per IP, 2 GB total, 30 new pastes / 10 min / IP, 20 wrong guesses / 10 min / IP → lockout.
-- **Data:** `~/horsebin/horsebin.db` (SQLite metadata) + `~/horsebin/blobs/`. Only orphan blobs are pruned; compaction of expired rows is TODO.
+- **Data:** `~/horsebin/horsebin.db` (SQLite metadata) + `~/horsebin/blobs/`. Only orphan blobs are pruned; when stored data reaches 1.5 GB (`HORSEBIN_COMPACT_MB`)
+  the content of all expired pastes is purged (rows kept as tombstones, `purged` set; logged as `compact:`).
 - **Abuse:** anyone holding the words can "delete / report abuse"; deletions are logged to the journal.
 
 ## Run
