@@ -27,8 +27,8 @@ HERE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("HORSEBIN_DIR", str(Path.home() / "horsebin")))
 HOST = os.environ.get("HORSEBIN_HOST", "127.0.0.1")
 PORT = int(os.environ.get("HORSEBIN_PORT", "3050"))
-SITE = os.environ.get("HORSEBIN_SITE", "horse.teramips.com")
-ABUSE = os.environ.get("HORSEBIN_ABUSE", "horse-abuse@trips.teramips.com")
+SITE = os.environ.get("HORSEBIN_SITE", f"localhost:{PORT}")  # public host name, used in printed links
+ABUSE = os.environ.get("HORSEBIN_ABUSE", "")  # abuse contact shown on /terms (optional)
 MAX_BYTES = int(os.environ.get("HORSEBIN_MAX_MB", "25")) * 1024 * 1024
 MAX_TOTAL = int(os.environ.get("HORSEBIN_MAX_TOTAL_MB", "2048")) * 1024 * 1024
 MAX_PER_IP = int(os.environ.get("HORSEBIN_MAX_PER_IP_MB", "200")) * 1024 * 1024
@@ -350,6 +350,7 @@ curl {SITE}/fruit-ladder-oyster          # download (raw)</pre>
 
 def terms():
     mb = MAX_BYTES // 1024 // 1024
+    contact = f'Otherwise write to <a href="mailto:{E(ABUSE)}">{E(ABUSE)}</a>.' if ABUSE else ""
     return page("HorseBin terms", f"""
 <section class="card prose">
 <h2>Terms of use</h2>
@@ -389,7 +390,7 @@ liable for anything that results.</p>
 
 <h2>Abuse &amp; takedown</h2>
 <p>If you have the words, press <i>delete / report abuse</i> on the paste — it's gone immediately.
-Otherwise write to <a href="mailto:{E(ABUSE)}">{E(ABUSE)}</a>.</p>
+{contact}</p>
 
 <p class="muted">Using HorseBin means you accept these terms. They may change; the version on this page is the one that applies.</p>
 </section>""")
