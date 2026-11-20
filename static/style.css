@@ -45,7 +45,7 @@ button, .btn {
   cursor: pointer; text-decoration: none; color: var(--ink); display: inline-block; white-space: nowrap;
 }
 button:hover, .btn:hover { border-color: var(--accent); }
-button.primary, .go button { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.primary, .btn.primary, .go button { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
 button.link { background: none; border: none; color: var(--muted); text-decoration: underline; padding: 9px 4px; font-size: 0.9rem; }
 
 .go { display: flex; gap: 8px; }

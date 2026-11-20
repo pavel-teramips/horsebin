@@ -15,6 +15,7 @@ computer. Solving xkcd one comic at a time: [#936](https://xkcd.com/936/).
 - **Limits:** 25 MB per paste, 200 MB live per IP, 2 GB total, 30 new pastes / 10 min / IP, 20 wrong guesses / 10 min / IP → lockout.
 - **Data:** `~/horsebin/horsebin.db` (SQLite metadata) + `~/horsebin/blobs/`. Only orphan blobs are pruned; when stored data reaches 1.5 GB (`HORSEBIN_COMPACT_MB`)
   the content of all expired pastes is purged (rows kept as tombstones, `purged` set; logged as `compact:`).
+- **Demo:** `fruit-ladder-oyster` (the example on the home page) always opens a built-in demo paste; never generated.
 - **Abuse:** anyone holding the words can "delete / report abuse"; deletions are logged to the journal.
 
 ## Run

@@ -117,6 +117,11 @@ def live_count():
     return q(f"SELECT count(*) FROM paste WHERE {LIVE}", time.time())[0][0]
 
 
+DEMO = "fruit-ladder-oyster"  # the example words on the home page: always opens a built-in demo
+DEMO_TEXT = (f"🐴 It works!\n\nThese were the example words. Yours will be different:\n"
+             f"paste something on {SITE}, get 3 words, type them on the other computer.\n")
+
+
 def create(data, filename, mime, ttl_key, burn, ip):
     ttl = TTLS[ttl_key]
     n = words_for(ttl_key)
@@ -125,6 +130,8 @@ def create(data, filename, mime, ttl_key, burn, ip):
     now = time.time()
     for _ in range(50):
         phrase = "-".join(W.generate(n))
+        if phrase == DEMO:
+            continue
         try:
             q("INSERT INTO paste (phrase, blob, filename, mime, size, created, expires, burn, ip) "
               "VALUES (?,?,?,?,?,?,?,?,?)", phrase, blob, filename, mime, len(data), now,
@@ -478,6 +485,17 @@ def gone_page(p):
 </section>""", 410)
 
 
+def demo_page():
+    words = DEMO.split("-")
+    return page(" ".join(words), f"""
+<section class="card">
+  {words_html(words, big=False)}
+  <div class="meta">the demo paste · it never expires</div>
+  <pre id="paste">{E(DEMO_TEXT)}</pre>
+  <div class="row"><a class="btn primary" href="/">Make your own</a></div>
+</section>""")
+
+
 def xkcd_page():
     return page("Nice try", """
 <section class="card center">
@@ -630,6 +648,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_page(locked_page()) if not self.cli else self.text(429, f"Whoa there. Try again in 10 minutes.\n")
         words = W.resolve(typed)
         phrase = "-".join(words) if words else None
+        if phrase == DEMO:
+            canonical = f"/{DEMO}{suffix}"
+            if urlsplit(self.path).path.rstrip("/") != canonical and not self.cli:
+                return self.redirect(canonical, 302)
+            if suffix or self.cli:
+                return self.text(200, DEMO_TEXT)
+            return self.send_page(demo_page())
         p = get_any(phrase) if phrase else None
         if p and not is_live(p):
             hit("miss", ip)
@@ -642,7 +667,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.text(404, "No horse here.\n")
             return self.send_page(not_found(typed, words))
         canonical = f"/{phrase}{suffix}"
-        if urlsplit(self.path).path.rstrip("/") != canonical:
+        if urlsplit(self.path).path.rstrip("/") != canonical and not self.cli:  # curl gets it without -L
             return self.redirect(canonical + ("?new" if new else ""), 302)
         if suffix or self.cli:
             if self.command == "HEAD" and p["burn"]:
